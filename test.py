@@ -371,58 +371,120 @@ def delete_loan(item):
         messagebox.showinfo("Cancelled", "Loan deletion cancelled.")
 
 def record_payment(item):
-    """Function to record a payment for a specific loan."""
-    
+    """Function to record a payment with a form for input."""
+
     # Retrieve loan_id from the selected item in the treeview
     loan_id = tree.item(item, 'values')[0]
 
-    # Prompt user for payment details
-    payment_date = simpledialog.askstring("Payment Date", "Enter the payment date (YYYY-MM-DD):")
-    payment_amount = simpledialog.askstring("Payment Amount", "Enter the payment amount:")
-    payment_method = simpledialog.askstring("Payment Method", "Enter the payment method (e.g., Cash, Bank Transfer):")
-    notes = simpledialog.askstring("Notes", "Enter any additional notes (optional):")
+    # Create a new Toplevel window for the form
+    form_window = tk.Toplevel()
+    form_window.title(f"Record Payment for Loan ID: {loan_id}")
 
-    # Validate required fields
-    if not payment_date or not payment_amount or not payment_method:
-        messagebox.showwarning("Input Error", "Please fill in all required fields (date, amount, method).")
-        return
+    # Function to handle form submission
+    def submit_payment():
+        payment_date = payment_date_entry.get()
+        payment_amount = payment_amount_entry.get()
+        payment_method = payment_method_entry.get()
+        notes = notes_entry.get()
 
-    try:
-        # Convert payment amount to float
-        payment_amount = float(payment_amount)
-        
-        # Validate and parse the date format
-        payment_date_obj = datetime.strptime(payment_date, "%Y-%m-%d").date()
+        # Validate required fields
+        if not payment_date or not payment_amount or not payment_method:
+            messagebox.showwarning("Input Error", "Please fill in all required fields (date, amount, method).", parent=form_window)
+            return
 
-    except ValueError as e:
-        messagebox.showerror("Input Error", f"Invalid data: {str(e)}")
-        return
+        try:
+            # Convert payment amount to float
+            payment_amount_float = float(payment_amount)
 
-    # Record the payment in the repayment table
-    try:
-        conn = sqlite3.connect('users.db')
-        cursor = conn.cursor()
+            # Validate and parse the date format
+            payment_date_obj = datetime.strptime(payment_date, "%Y-%m-%d").date()
 
-        # Insert the payment details into the repayment table
-        cursor.execute('''
-            INSERT INTO repayment (loan_id, payment_date, payment_amount, payment_method, notes)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (loan_id, payment_date, payment_amount, payment_method, notes))
+        except ValueError as e:
+            messagebox.showerror("Input Error", f"Invalid data: {str(e)}", parent=form_window)
+            return
 
-        conn.commit()
-        conn.close()
+        # Record the payment in the repayment table
+        try:
+            conn = sqlite3.connect('users.db')
+            cursor = conn.cursor()
 
-        # Inform the user that the payment was recorded successfully
-        messagebox.showinfo("Success", f"Payment of {payment_amount} recorded for Loan ID: {loan_id}")
+            # Insert the payment details into the repayment table
+            cursor.execute('''
+                INSERT INTO repayment (loan_id, payment_date, payment_amount, payment_method, notes)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (loan_id, payment_date, payment_amount_float, payment_method, notes))
 
-    except Exception as e:
-        messagebox.showerror("Database Error", f"An error occurred while recording the payment: {str(e)}")
+            conn.commit()
+            conn.close()
+
+            # Inform the user that the payment was recorded successfully
+            messagebox.showinfo("Success", f"Payment of {payment_amount_float} recorded for Loan ID: {loan_id}", parent=form_window)
+
+            # Close the form window after successful submission
+            form_window.destroy()
+
+        except Exception as e:
+            messagebox.showerror("Database Error", f"An error occurred while recording the payment: {str(e)}", parent=form_window)
+
+    # Create labels and entries for payment details
+    tk.Label(form_window, text="Payment Date (YYYY-MM-DD):").grid(row=0, column=0, padx=10, pady=5, sticky='w')
+    payment_date_entry = tk.Entry(form_window)
+    payment_date_entry.grid(row=0, column=1, padx=10, pady=5)
+
+    tk.Label(form_window, text="Payment Amount:").grid(row=1, column=0, padx=10, pady=5, sticky='w')
+    payment_amount_entry = tk.Entry(form_window)
+    payment_amount_entry.grid(row=1, column=1, padx=10, pady=5)
+
+    tk.Label(form_window, text="Payment Method:").grid(row=2, column=0, padx=10, pady=5, sticky='w')
+    payment_method_entry = tk.Entry(form_window)
+    payment_method_entry.grid(row=2, column=1, padx=10, pady=5)
+
+    tk.Label(form_window, text="Notes (optional):").grid(row=3, column=0, padx=10, pady=5, sticky='w')
+    notes_entry = tk.Entry(form_window)
+    notes_entry.grid(row=3, column=1, padx=10, pady=5)
+
+    # Add submit button
+    submit_button = tk.Button(form_window, text="Submit Payment", command=submit_payment)
+    submit_button.grid(row=4, column=0, columnspan=2, pady=10)
+
+    # Run the window loop
+    form_window.mainloop()
 
 def show_payment_history(item):
     """Function to show payment history."""
     loan_id = tree.item(item, 'values')[0]
-    # Implement the logic to show payment history
-    messagebox.showinfo("Payment History", f"Show Payment History for Loan ID: {loan_id}")
+    
+    # Connect to the database
+    conn = sqlite3.connect('users.db')
+    cursor = conn.cursor()
+    
+    # Fetch repayment history for the selected loan
+    cursor.execute('''
+        SELECT payment_date, payment_amount, payment_method, notes 
+        FROM repayment 
+        WHERE loan_id = ?
+        ORDER BY payment_date ASC
+    ''', (loan_id,))
+    
+    # Fetch all repayment records for the loan
+    payments = cursor.fetchall()
+    
+    # Close the connection
+    conn.close()
+    
+    # If there are no payments, show a message
+    if not payments:
+        messagebox.showinfo("Payment History", f"No payment history found for Loan ID: {loan_id}")
+        return
+    
+    # Format the payment history for display
+    payment_history = f"Payment History for Loan ID: {loan_id}\n\n"
+    for payment in payments:
+        payment_date, payment_amount, payment_method, notes = payment
+        payment_history += f"Date: {payment_date}\nAmount: {payment_amount}\nMethod: {payment_method}\nNotes: {notes if notes else 'N/A'}\n\n"
+    
+    # Display the payment history in a messagebox
+    messagebox.showinfo("Payment History", payment_history)
 
 def view_loan_details():
     conn = sqlite3.connect('users.db')
